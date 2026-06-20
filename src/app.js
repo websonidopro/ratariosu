@@ -6,11 +6,19 @@ import operarRoutes from './routes/operar.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import usuarioRoutes from './routes/usuario.routes.js';
 import walletRoutes from './routes/wallet.routes.js';
+import depositsWebhook from './webhooks/deposits.webhook.js';
+import tatumWebhook from './webhooks/tatum.webhook.js';
+
+s
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+const app = express();
+
+// ... configuración de CORS ...
+app.use(express.json());
 
 app.use(cors({
   origin: ['https://trade-zoo.vercel.app', 'http://localhost:5173'],
@@ -32,6 +40,11 @@ app.use('/api', operarRoutes);
 app.use('/api', authRoutes);
 app.use('/api', usuarioRoutes);
 app.use('/api', walletRoutes);
+
+// Webhooks
+app.use('/webhooks', depositsWebhook);
+app.use('/webhooks', tatumWebhook);     
+
 // Iniciar servidor
 app.listen(PORT, () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
