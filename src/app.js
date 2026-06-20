@@ -9,7 +9,6 @@ import walletRoutes from './routes/wallet.routes.js';
 import depositsWebhook from './webhooks/deposits.webhook.js';
 import tatumWebhook from './webhooks/tatum.webhook.js';
 
-s
 dotenv.config();
 
 const app = express();
