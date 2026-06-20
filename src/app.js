@@ -13,8 +13,14 @@ const PORT = process.env.PORT || 8080;
 
 
 app.use(cors({
-  origin: ['https://trade-zoo.vercel.app/', 'http://localhost:5173']
+  origin: ['https://trade-zoo.vercel.app', 'http://localhost:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
+
+app.use(express.json());
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
