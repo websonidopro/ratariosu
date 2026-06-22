@@ -14,7 +14,7 @@ export const getPerfilController = async (req, res) => {
     // 🌟 2. OBTENER EL PERFIL REAL DE LA BASE DE DATOS
     const { data: perfil, error: perfilError } = await supabaseAdmin
       .from('perfiles')
-      .select('nombre, codigo, ganancias_usdt')
+      .select('nombre, mi_codigo, ganancias_usdt')
       .eq('id', user.id)
       .single();
 
@@ -70,7 +70,7 @@ export const getPerfilController = async (req, res) => {
       gananciaTotal: perfil?.ganancias_usdt || "0.00", // Ahora es dinámico
       user: {
         nombre: perfil?.nombre || "Granjero",
-        codigo: perfil?.codigo || "SIN-CODIGO" // Aquí atrapa tu TZ-XXXXXX
+        codigo: perfil?.mi_codigo || "SIN-CODIGO" // Aquí atrapa tu TZ-XXXXXX
       },
       red: {
         nivel1: nivel1Ids.length,
