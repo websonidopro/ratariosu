@@ -7,9 +7,20 @@ export const getPerfilController = async (req, res) => {
 
     const token = authHeader.split(" ")[1];
 
-    // 1. Validar identidad del usuario
+    // 1. Validar identidad del usuario en Auth
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) throw userError;
+
+    // 🌟 2. OBTENER EL PERFIL REAL DE LA BASE DE DATOS
+    const { data: perfil, error: perfilError } = await supabaseAdmin
+      .from('perfiles')
+      .select('nombre, codigo, ganancias_usdt')
+      .eq('id', user.id)
+      .single();
+
+    if (perfilError && perfilError.code !== 'PGRST116') {
+      console.error("Error buscando perfil:", perfilError);
+    }
 
     // --- 🌳 CÁLCULO ESTRUCTURAL DE LA RED (3 NIVELES) ---
     let nivel1Ids = [];
@@ -22,8 +33,7 @@ export const getPerfilController = async (req, res) => {
       .select('id')
       .eq('referido_por', user.id);
     
-    if (e1) throw e1;
-    if (lvl1) nivel1Ids = lvl1.map(u => u.id);
+    if (!e1 && lvl1) nivel1Ids = lvl1.map(u => u.id);
 
     // Nivel 2: Usuarios invitados por la gente de mi Nivel 1
     if (nivel1Ids.length > 0) {
@@ -32,8 +42,7 @@ export const getPerfilController = async (req, res) => {
         .select('id')
         .in('referido_por', nivel1Ids);
       
-      if (e2) throw e2;
-      if (lvl2) nivel2Ids = lvl2.map(u => u.id);
+      if (!e2 && lvl2) nivel2Ids = lvl2.map(u => u.id);
     }
 
     // Nivel 3: Usuarios invitados por la gente de mi Nivel 2
@@ -43,26 +52,25 @@ export const getPerfilController = async (req, res) => {
         .select('id')
         .in('referido_por', nivel2Ids);
       
-      if (e3) throw e3;
-      if (lvl3) nivel3Ids = lvl3.map(u => u.id);
+      if (!e3 && lvl3) nivel3Ids = lvl3.map(u => u.id);
     }
 
-    // Suma total de miembros en la red
     const totalMiembrosRed = nivel1Ids.length + nivel2Ids.length + nivel3Ids.length;
 
-    // 2. Traer inversiones del usuario
+    // 3. Traer inversiones del usuario
     const { data: inversiones } = await supabaseAdmin
       .from('inversiones_usuarios')
       .select('*, planes_animales(nombre)')
       .eq('usuario_id', user.id);
 
+    // 4. Retornar la respuesta con los datos de la tabla perfiles
     return res.json({
       ok: true,
       inversiones: inversiones || [],
-      gananciaTotal: "0.00",
+      gananciaTotal: perfil?.ganancias_usdt || "0.00", // Ahora es dinámico
       user: {
-        nombre: user.user_metadata?.nombre_completo || "Granjero",
-        codigo: user.user_metadata?.mi_codigo || "SIN-CODIGO"
+        nombre: perfil?.nombre || "Granjero",
+        codigo: perfil?.codigo || "SIN-CODIGO" // Aquí atrapa tu TZ-XXXXXX
       },
       red: {
         nivel1: nivel1Ids.length,
