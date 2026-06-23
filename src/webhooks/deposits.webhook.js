@@ -79,13 +79,23 @@ router.post("/deposit/webhook", async (req, res) => {
 
     if (insertError) throw insertError;
 
-    // Llamar al nuevo RPC para sumar el saldo
-    const { error: rpcError } = await supabaseAdmin.rpc("increment_user_balance", {
-      userid: userId,
-      amountdelta: parsedAmount,
-    });
+    console.log("💰 Intentando actualizar saldo en perfiles para el usuario:", userId);
+    console.log("💰 Monto a acreditar:", parsedAmount);
 
-    if (rpcError) throw rpcError;
+    // Actualizar saldo_usdt en perfiles directamente (sin RPC)
+    const { error: balanceError } = await supabaseAdmin
+      .from("perfiles")
+      .update({
+        saldo_usdt: supabaseAdmin.raw(`saldo_usdt + ${parsedAmount}`)
+      })
+      .eq("id", userId);
+
+    if (balanceError) {
+      console.error("❌ Error actualizando saldo:", balanceError);
+      throw balanceError;
+    }
+
+    console.log("✅ Saldo actualizado exitosamente para usuario:", userId);
 
     return res.json({ ok: true });
   } catch (e) {

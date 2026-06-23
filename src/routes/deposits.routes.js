@@ -244,6 +244,9 @@ router.post("/deposits/webhook", async (req, res) => {
     }
 
     // Actualizar saldo_usdt en perfiles
+    console.log("💰 Intentando actualizar saldo en perfiles para el usuario:", resolvedUserId);
+    console.log("💰 Monto a acreditar:", parsedAmount);
+
     const { error: balanceError } = await supabaseAdmin
       .from("perfiles")
       .update({
@@ -255,6 +258,8 @@ router.post("/deposits/webhook", async (req, res) => {
       console.error("❌ Error actualizando saldo:", balanceError);
       throw balanceError;
     }
+
+    console.log("✅ Saldo actualizado exitosamente para usuario:", resolvedUserId);
 
     // Obtener nuevo saldo
     const { data: userRow, error: userError } = await supabaseAdmin
