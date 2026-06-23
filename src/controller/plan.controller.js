@@ -4,10 +4,14 @@ import { processReferralCommissions } from "../services/referral.service.js";
 // --- ENDPOINT 1: OBTENER CATÁLOGO DE ANIMALES ---
 export const getPlanesController = async (req, res) => {
   try {
+    console.log("🔍 Consultando planes_animales...");
     const { data, error } = await supabaseAdmin
       .from('planes_animales')
       .select('*')
-      .order('precio', { ascending: true }); 
+      .order('precio', { ascending: true });
+
+    console.log("📊 Resultado de Supabase:", { data, error });
+    console.log("📊 Cantidad de planes:", data?.length || 0);
 
     if (error) throw error;
 
