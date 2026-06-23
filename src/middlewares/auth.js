@@ -1,26 +1,19 @@
 import { supabaseAdmin } from "../services/supabase.service.js";
+import { verifyToken } from "../utils/verifyToken.js";
 
 export const authMiddleware = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: "Falta el token de autorización." });
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const auth = await verifyToken(token);
+
+    if (!auth.user) {
+      return res.status(auth.status).json(auth.body);
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    
-    // Verificamos el token directamente con la seguridad de Supabase
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-
-    if (error || !user) {
-      return res.status(401).json({ error: "Token inválido o sesión expirada." });
-    }
-
-    // Guardamos la info del usuario para que el controlador sepa a quién cobrarle
-    req.user = user;
+    req.user = auth.user;
     next();
   } catch (err) {
-    console.error("Error en authMiddleware:", err);
+    console.error("Error inesperado en authMiddleware:", err);
     return res.status(500).json({ error: "Error interno de autenticación." });
   }
 };

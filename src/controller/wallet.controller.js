@@ -1,27 +1,37 @@
 import { supabaseAdmin } from "../services/supabase.service.js";
 import { deriveChildAddress, getNextDerivationIndex } from "../services/hdwallet.service.js";
+import { verifyToken } from "../utils/verifyToken.js";
 
-// 1. Obtener la información de la billetera (Saldo y Dirección)
 export const getWalletInfo = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !user) throw error;
+    const auth = await verifyToken(token);
 
-    // Buscamos si ya tiene una dirección generada
-    const { data: walletData } = await supabaseAdmin
+    if (!auth.user) {
+      return res.status(auth.status).json(auth.body);
+    }
+
+    const user = auth.user;
+
+    const { data: walletData, error: walletError } = await supabaseAdmin
       .from('user_wallets')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    // Buscamos el saldo (asumiendo que está en la tabla perfiles o calculando desde el ledger)
-    // Para este paso, traemos el saldo base de perfiles
-    const { data: perfil } = await supabaseAdmin
+    if (walletError) {
+      console.error("Error consultando user_wallets:", walletError);
+    }
+
+    const { data: perfil, error: perfilError } = await supabaseAdmin
       .from('perfiles')
       .select('saldo_usdt, ganancias_usdt')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
+
+    if (perfilError) {
+      console.error("Error consultando perfil:", perfilError);
+    }
 
     return res.json({
       ok: true,
@@ -33,7 +43,8 @@ export const getWalletInfo = async (req, res) => {
       } : null
     });
   } catch (err) {
-    return res.status(401).json({ error: "No autorizado" });
+    console.error("❌ Error en getWalletInfo:", err);
+    return res.status(500).json({ error: "Error interno al consultar la cartera" });
   }
 };
 
@@ -41,30 +52,54 @@ export const getWalletInfo = async (req, res) => {
 export const createDepositAddress = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !user) throw error;
+    const auth = await verifyToken(token);
 
-    // Verificamos si ya tiene una para no duplicar
-    const { data: existing } = await supabaseAdmin
+    if (!auth.user) {
+      return res.status(auth.status).json(auth.body);
+    }
+
+    const user = auth.user;
+
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('user_wallets')
       .select('address')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (existing) {
+    if (existingError) {
+      console.error("Error consultando wallet existente:", existingError);
+    }
+
+    if (existing?.address) {
       return res.json({ ok: true, red: 'BEP20-USDT', direccion: existing.address });
     }
 
-    // Generamos la nueva billetera usando tu servicio
-    const nextIndex = await getNextDerivationIndex(supabaseAdmin);
-    const newWallet = deriveChildAddress(nextIndex);
+    let nextIndex;
+    try {
+      nextIndex = await getNextDerivationIndex(supabaseAdmin);
+    } catch (dbError) {
+      console.error("Error obteniendo índice de derivación:", dbError);
+      return res.status(500).json({ error: "Error al obtener el siguiente índice de wallet." });
+    }
 
-    // Guardamos en la base de datos
-    await supabaseAdmin.from('user_wallets').insert([{
+    let newWallet;
+    try {
+      newWallet = deriveChildAddress(nextIndex);
+    } catch (deriveError) {
+      console.error("Error derivando dirección:", deriveError);
+      return res.status(500).json({ error: "Error al generar la dirección de depósito." });
+    }
+
+    const { error: insertError } = await supabaseAdmin.from('user_wallets').insert([{
       user_id: user.id,
       address: newWallet.address,
       unique_tag: String(nextIndex)
     }]);
+
+    if (insertError) {
+      console.error("Error insertando wallet:", insertError);
+      return res.status(500).json({ error: "No se pudo guardar la dirección de depósito." });
+    }
 
     return res.json({ 
       ok: true, 

@@ -43,6 +43,17 @@ app.use('/api', walletRoutes);
 app.use('/webhooks', depositsWebhook);
 app.use('/webhooks', tatumWebhook);     
 
+// Manejadores globales de errores para evitar que el proceso muera
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // No matamos el proceso, solo logueamos el error
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  // No matamos el proceso, solo logueamos el error
+});
+
 // Iniciar servidor
 app.listen(PORT, () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
