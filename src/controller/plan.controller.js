@@ -5,6 +5,8 @@ import { processReferralCommissions } from "../services/referral.service.js";
 export const getPlanesController = async (req, res) => {
   try {
     console.log("🔍 Consultando planes_animales...");
+    console.log("🔍 Supabase URL:", process.env.SUPABASE_URL ? "Configurada" : "NO CONFIGURADA");
+    console.log("🔍 Service Key:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "Configurada" : "NO CONFIGURADA");
     const { data, error } = await supabaseAdmin
       .from('planes_animales')
       .select('*')
