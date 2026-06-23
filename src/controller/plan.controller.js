@@ -29,38 +29,102 @@ export const buyPlanController = async (req, res) => {
     const userId = req.user.id;
     const { plan_id } = req.body;
 
-    console.log("🛒 Iniciando compra:", { userId, plan_id });
+    console.log("🛒 Iniciando compra manual:", { userId, plan_id });
 
     if (!plan_id) return res.status(400).json({ error: "Falta el ID del plan" });
 
-    console.log("🔍 Ejecutando RPC comprar_animal_plan...");
-    const { data: rpcRows, error: rpcError } = await supabaseAdmin.rpc("comprar_animal_plan", {
-      p_user_id: userId,
-      p_plan_id: plan_id,
-    });
+    // Paso 1: Obtener Plan
+    console.log("🔍 Paso 1: Obteniendo plan...");
+    const { data: plan, error: planError } = await supabaseAdmin
+      .from('planes_animales')
+      .select('*')
+      .eq('id', plan_id)
+      .maybeSingle();
 
-    console.log("📊 Resultado RPC:", { rpcRows, rpcError });
-
-    if (rpcError) {
-      const msg = String(rpcError.message ?? "");
-      console.error("❌ Error en RPC:", msg);
-      if (msg.includes("Saldo insuficiente") || msg.includes("no existe") || msg.includes("No se encontró")) {
-        return res.status(400).json({ error: msg });
-      }
-      throw rpcError;
+    if (planError || !plan) {
+      console.error("❌ Plan no encontrado:", planError);
+      return res.status(404).json({ error: "Plan no encontrado" });
     }
 
-    const row = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
-    console.log("📋 Fila RPC:", row);
-    
-    if (!row?.inversion_id) {
-      console.error("❌ RPC no devolvió inversion_id");
-      return res.status(500).json({ error: "No se pudo procesar la adopción" });
+    const planPrecio = Number(plan.precio);
+    const planGananciaDiaria = Number(plan.ganancia_diaria);
+    const planDuracion = Number(plan.duracion_dias);
+
+    console.log("� Plan encontrado:", { planPrecio, planGananciaDiaria, planDuracion });
+
+    // Paso 2: Obtener Saldo del Usuario
+    console.log("💰 Paso 2: Obteniendo saldo del usuario...");
+    const { data: perfil, error: perfilError } = await supabaseAdmin
+      .from('perfiles')
+      .select('saldo_usdt')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (perfilError || !perfil) {
+      console.error("❌ Perfil no encontrado:", perfilError);
+      return res.status(404).json({ error: "Perfil de usuario no encontrado" });
     }
 
-    console.log("🎁 Procesando comisiones de referidos...");
-    const commissionResult = await processReferralCommissions(userId, row.plan_precio, null, {
-      referenciaId: row.inversion_id,
+    const saldoActual = Number(perfil.saldo_usdt || 0);
+    console.log("💵 Saldo actual:", saldoActual);
+
+    // Paso 3: Validación de Fondos
+    if (saldoActual < planPrecio) {
+      console.error("❌ Saldo insuficiente:", { saldoActual, planPrecio });
+      return res.status(400).json({ error: "Saldo insuficiente" });
+    }
+
+    // Paso 4: Descontar Saldo
+    console.log("📉 Paso 4: Descontando saldo...");
+    const nuevoSaldo = saldoActual - planPrecio;
+    const { error: updateError } = await supabaseAdmin
+      .from('perfiles')
+      .update({ saldo_usdt: nuevoSaldo })
+      .eq('id', userId);
+
+    if (updateError) {
+      console.error("❌ Error actualizando saldo:", updateError);
+      return res.status(500).json({ error: "Error al actualizar el saldo" });
+    }
+
+    console.log("✅ Saldo actualizado:", nuevoSaldo);
+
+    // Paso 5: Registrar Inversión
+    console.log("📝 Paso 5: Registrando inversión...");
+    const fechaExpiracion = new Date();
+    fechaExpiracion.setDate(fechaExpiracion.getDate() + planDuracion);
+
+    const { data: inversion, error: inversionError } = await supabaseAdmin
+      .from('inversiones_usuarios')
+      .insert({
+        usuario_id: userId,
+        plan_id: plan_id,
+        monto_invertido: planPrecio,
+        ganancia_diaria: planGananciaDiaria,
+        activa: true,
+        created_at: new Date().toISOString(),
+        last_claim_date: new Date().toISOString(),
+        fecha_expiracion: fechaExpiracion.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (inversionError) {
+      console.error("❌ Error insertando inversión:", inversionError);
+      // Revertir saldo en caso de error
+      await supabaseAdmin
+        .from('perfiles')
+        .update({ saldo_usdt: saldoActual })
+        .eq('id', userId);
+      return res.status(500).json({ error: "Error al registrar la inversión" });
+    }
+
+    console.log("✅ Inversión registrada:", inversion.id);
+
+    // Paso 6: Referidos
+    console.log("🎁 Paso 6: Procesando comisiones de referidos...");
+    const commissionResult = await processReferralCommissions(userId, planPrecio, null, {
+      referenciaId: inversion.id,
       referenciaTipo: "adopcion_animal",
     });
     console.log("✅ Resultado comisiones:", commissionResult);
@@ -68,9 +132,9 @@ export const buyPlanController = async (req, res) => {
     return res.json({
       ok: true,
       message: "¡Plan adquirido con éxito!",
-      inversion_id: row.inversion_id,
-      new_balance: row.nuevo_saldo,
-      expires_at: row.fecha_expiracion
+      inversion_id: inversion.id,
+      new_balance: nuevoSaldo,
+      expires_at: fechaExpiracion.toISOString()
     });
 
   } catch (err) {
