@@ -1,6 +1,6 @@
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
-import { getPlanesController, buyPlanController } from "../controller/plan.controller.js";
+import { getPlanesController, buyPlanController, operarController } from "../controller/plan.controller.js";
 
 const router = express.Router();
 
@@ -9,5 +9,8 @@ router.get("/planes", getPlanesController);
 
 // Ruta protegida para efectuar la compra
 router.post("/planes/comprar", authMiddleware, buyPlanController);
+
+// Ruta protegida para recolectar ganancias (operar)
+router.post("/planes/operar", authMiddleware, operarController);
 
 export default router;

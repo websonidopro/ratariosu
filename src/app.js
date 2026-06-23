@@ -6,6 +6,8 @@ import operarRoutes from './routes/operar.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import usuarioRoutes from './routes/usuario.routes.js';
 import walletRoutes from './routes/wallet.routes.js';
+import depositsRoutes from './routes/deposits.routes.js';
+import withdrawalsRoutes from './routes/withdrawals.routes.js';
 import depositsWebhook from './webhooks/deposits.webhook.js';
 import tatumWebhook from './webhooks/tatum.webhook.js';
 
@@ -38,6 +40,8 @@ app.use('/api', operarRoutes);
 app.use('/api', authRoutes);
 app.use('/api', usuarioRoutes);
 app.use('/api', walletRoutes);
+app.use('/api', depositsRoutes);
+app.use('/api', withdrawalsRoutes);
 
 // Webhooks
 app.use('/webhooks', depositsWebhook);

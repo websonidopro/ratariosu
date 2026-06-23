@@ -64,3 +64,118 @@ export const buyPlanController = async (req, res) => {
     return res.status(500).json({ error: "Error interno procesando la compra" });
   }
 };
+
+// --- ENDPOINT 3: OPERAR/RECOLECTAR GANANCIAS ---
+export const operarController = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Obtener todas las inversiones activas del usuario
+    const { data: inversiones, error: inversionesError } = await supabaseAdmin
+      .from('inversiones_usuarios')
+      .select(`
+        id,
+        last_claim_date,
+        planes_animales (
+          id,
+          ganancia_diaria
+        )
+      `)
+      .eq('usuario_id', userId)
+      .eq('activa', true);
+
+    if (inversionesError) {
+      console.error("❌ Error obteniendo inversiones:", inversionesError);
+      return res.status(500).json({ error: "Error al obtener tus inversiones" });
+    }
+
+    if (!inversiones || inversiones.length === 0) {
+      return res.status(400).json({ error: "No tienes planes activos para operar" });
+    }
+
+    const now = new Date();
+    let totalGanancia = 0;
+    const detalles = [];
+
+    // Calcular ganancias para cada inversión
+    for (const inversion of inversiones) {
+      const lastClaim = inversion.last_claim_date ? new Date(inversion.last_claim_date) : inversion.created_at ? new Date(inversion.created_at) : null;
+      
+      if (!lastClaim) {
+        console.log("⚠️ Inversión sin fecha de creación:", inversion.id);
+        continue;
+      }
+
+      // Calcular días transcurridos (mínimo 1 día si ya pasó tiempo)
+      const diffTime = now - lastClaim;
+      const diffDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+
+      const gananciaDiaria = Number(inversion.planes_animales?.ganancia_diaria || 0);
+      if (gananciaDiaria <= 0) {
+        console.log("⚠️ Plan sin ganancia diaria:", inversion.planes_animales?.id);
+        continue;
+      }
+
+      const gananciaCalculada = gananciaDiaria * diffDays;
+      totalGanancia += gananciaCalculada;
+
+      detalles.push({
+        inversion_id: inversion.id,
+        plan_nombre: inversion.planes_animales?.id || 'Desconocido',
+        dias_acumulados: diffDays,
+        ganancia_diaria: gananciaDiaria,
+        ganancia_total: gananciaCalculada
+      });
+
+      // Actualizar last_claim_date de esta inversión
+      const { error: updateError } = await supabaseAdmin
+        .from('inversiones_usuarios')
+        .update({ last_claim_date: now.toISOString() })
+        .eq('id', inversion.id);
+
+      if (updateError) {
+        console.error("❌ Error actualizando last_claim_date:", updateError);
+      }
+    }
+
+    if (totalGanancia <= 0) {
+      return res.status(400).json({ error: "No hay ganancias disponibles para recolectar" });
+    }
+
+    // Sumar ganancias al saldo_usdt del usuario
+    const { error: updateSaldoError } = await supabaseAdmin
+      .from('perfiles')
+      .update({
+        ganancias_usdt: supabaseAdmin.raw(`ganancias_usdt + ${totalGanancia}`)
+      })
+      .eq('id', userId);
+
+    if (updateSaldoError) {
+      console.error("❌ Error actualizando ganancias_usdt:", updateSaldoError);
+      return res.status(500).json({ error: "Error al actualizar tu saldo de ganancias" });
+    }
+
+    // Obtener nuevo saldo
+    const { data: perfil, error: perfilError } = await supabaseAdmin
+      .from('perfiles')
+      .select('ganancias_usdt')
+      .eq('id', userId)
+      .single();
+
+    if (perfilError) {
+      console.error("❌ Error obteniendo perfil actualizado:", perfilError);
+    }
+
+    return res.json({
+      ok: true,
+      message: `Has recolectado ${totalGanancia.toFixed(2)} USDT en ganancias`,
+      total_ganancia: totalGanancia,
+      nuevo_saldo_ganancias: perfil?.ganancias_usdt || 0,
+      detalles
+    });
+
+  } catch (err) {
+    console.error("❌ Error en operarController:", err);
+    return res.status(500).json({ error: "Error interno al procesar la operación" });
+  }
+};
