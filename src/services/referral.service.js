@@ -28,6 +28,7 @@ export const processReferralCommissions = async (
   options = {}
 ) => {
   try {
+    console.log("🎁 Iniciando procesamiento de comisiones:", { userId, amount, options });
     const baseAmount = Number(amount);
     if (!Number.isFinite(baseAmount) || baseAmount <= 0) {
       console.log("⚠️ Monto inválido para comisiones:", amount);
@@ -42,12 +43,15 @@ export const processReferralCommissions = async (
     const referenciaId = options?.referenciaId ?? null;
     const referenciaTipo = options?.referenciaTipo ?? "compra_plan";
 
+    console.log("🔍 Buscando comprador en perfiles...");
     // Obtener información del comprador desde perfiles
     const { data: buyer, error: buyerError } = await supabaseAdmin
       .from("perfiles")
       .select("id, mi_codigo, referred_by")
       .eq("id", userId)
       .maybeSingle();
+
+    console.log("📋 Datos del comprador:", { buyer, buyerError });
 
     if (buyerError) {
       console.error("❌ Error obteniendo comprador:", buyerError);
@@ -61,6 +65,7 @@ export const processReferralCommissions = async (
 
     // Si no tiene referido, no hay comisiones
     const level1Id = buyer.referred_by ?? null;
+    console.log("👤 Referido nivel 1:", level1Id);
     if (!level1Id) {
       console.log("ℹ️ Usuario sin referido, no se generan comisiones");
       return { ok: true, reason: 'no_referrer' };
@@ -68,15 +73,19 @@ export const processReferralCommissions = async (
 
     // Procesar comisión Nivel 1
     try {
+      console.log("🔍 Buscando patrocinador nivel 1:", level1Id);
       const { data: level1User, error: level1Error } = await supabaseAdmin
         .from("perfiles")
         .select("id, mi_codigo, referred_by")
         .eq("id", level1Id)
         .maybeSingle();
 
+      console.log("📋 Datos nivel 1:", { level1User, level1Error });
+
       if (level1Error || !level1User?.id) {
         console.error("❌ Error obteniendo nivel 1:", level1Error);
       } else {
+        console.log("💰 Otorgando comisión nivel 1...");
         await grantCommission(
           level1Id,
           userId,
@@ -90,16 +99,21 @@ export const processReferralCommissions = async (
 
       // Procesar comisión Nivel 2
       const level2Id = level1User?.referred_by ?? null;
+      console.log("👤 Referido nivel 2:", level2Id);
       if (level2Id) {
+        console.log("🔍 Buscando patrocinador nivel 2:", level2Id);
         const { data: level2User, error: level2Error } = await supabaseAdmin
           .from("perfiles")
           .select("id, mi_codigo, referred_by")
           .eq("id", level2Id)
           .maybeSingle();
 
+        console.log("📋 Datos nivel 2:", { level2User, level2Error });
+
         if (level2Error || !level2User?.id) {
           console.error("❌ Error obteniendo nivel 2:", level2Error);
         } else {
+          console.log("💰 Otorgando comisión nivel 2...");
           await grantCommission(
             level2Id,
             userId,
@@ -113,16 +127,21 @@ export const processReferralCommissions = async (
 
         // Procesar comisión Nivel 3
         const level3Id = level2User?.referred_by ?? null;
+        console.log("👤 Referido nivel 3:", level3Id);
         if (level3Id) {
+          console.log("🔍 Buscando patrocinador nivel 3:", level3Id);
           const { data: level3User, error: level3Error } = await supabaseAdmin
             .from("perfiles")
             .select("id, mi_codigo")
             .eq("id", level3Id)
             .maybeSingle();
 
+          console.log("📋 Datos nivel 3:", { level3User, level3Error });
+
           if (level3Error || !level3User?.id) {
             console.error("❌ Error obteniendo nivel 3:", level3Error);
           } else {
+            console.log("💰 Otorgando comisión nivel 3...");
             await grantCommission(
               level3Id,
               userId,
@@ -140,10 +159,12 @@ export const processReferralCommissions = async (
       throw err;
     }
 
+    console.log("✅ Comisiones procesadas exitosamente");
     return { ok: true };
 
   } catch (err) {
-    console.error("❌ Error en processReferralCommissions:", err);
+    console.error("❌❌❌ Error en processReferralCommissions:", err);
+    console.error("❌ Stack trace:", err.stack);
     return { ok: false, error: err.message };
   }
 };

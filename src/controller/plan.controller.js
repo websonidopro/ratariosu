@@ -29,15 +29,21 @@ export const buyPlanController = async (req, res) => {
     const userId = req.user.id;
     const { plan_id } = req.body;
 
+    console.log("🛒 Iniciando compra:", { userId, plan_id });
+
     if (!plan_id) return res.status(400).json({ error: "Falta el ID del plan" });
 
+    console.log("🔍 Ejecutando RPC comprar_animal_plan...");
     const { data: rpcRows, error: rpcError } = await supabaseAdmin.rpc("comprar_animal_plan", {
       p_user_id: userId,
       p_plan_id: plan_id,
     });
 
+    console.log("📊 Resultado RPC:", { rpcRows, rpcError });
+
     if (rpcError) {
       const msg = String(rpcError.message ?? "");
+      console.error("❌ Error en RPC:", msg);
       if (msg.includes("Saldo insuficiente") || msg.includes("no existe") || msg.includes("No se encontró")) {
         return res.status(400).json({ error: msg });
       }
@@ -45,15 +51,19 @@ export const buyPlanController = async (req, res) => {
     }
 
     const row = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+    console.log("📋 Fila RPC:", row);
     
     if (!row?.inversion_id) {
+      console.error("❌ RPC no devolvió inversion_id");
       return res.status(500).json({ error: "No se pudo procesar la adopción" });
     }
 
-    await processReferralCommissions(userId, row.plan_precio, null, {
+    console.log("🎁 Procesando comisiones de referidos...");
+    const commissionResult = await processReferralCommissions(userId, row.plan_precio, null, {
       referenciaId: row.inversion_id,
       referenciaTipo: "adopcion_animal",
     });
+    console.log("✅ Resultado comisiones:", commissionResult);
 
     return res.json({
       ok: true,
@@ -64,7 +74,8 @@ export const buyPlanController = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Error en buyPlanController:", err);
+    console.error("❌❌❌ DETALLE FATAL EN COMPRA:", err);
+    console.error("❌ Stack trace:", err.stack);
     return res.status(500).json({ error: "Error interno procesando la compra" });
   }
 };
