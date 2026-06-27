@@ -5,6 +5,7 @@ import {
   deriveChildAddress,
   getNextDerivationIndex,
 } from "../services/hdwallet.service.js";
+import { Contract, JsonRpcProvider, formatUnits, Interface, id, zeroPadValue } from "ethers";
 
 const router = express.Router();
 
@@ -288,6 +289,171 @@ router.post("/deposits/webhook", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error en /deposits/webhook:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+/**
+ * ============================================
+ * ENDPOINT DE RECUPERACIÓN DE DEPÓSITOS
+ * ============================================
+ */
+router.post("/depositos/reclamar", authMiddleware, async (req, res) => {
+  try {
+    const { txHash } = req.body;
+    const userId = req.user?.id;
+
+    if (!txHash) {
+      return res.status(400).json({ error: "El hash de transacción es requerido" });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    console.log("💰 Recuperación de depósito solicitada:", { userId, txHash });
+
+    // Configuración de blockchain
+    const rpcUrl = String(process.env.BSC_RPC_URL || "").trim();
+    const usdtContract = String(process.env.USDT_CONTRACT_BSC || "").trim();
+
+    if (!rpcUrl || !usdtContract) {
+      return res.status(500).json({ error: "Configuración de blockchain no disponible" });
+    }
+
+    const provider = new JsonRpcProvider(rpcUrl);
+    const ERC20_ABI = [
+      "event Transfer(address indexed from, address indexed to, uint256 value)",
+      "function decimals() view returns (uint8)",
+    ];
+    const TRANSFER_TOPIC0 = id("Transfer(address,address,uint256)");
+
+    // 1. Obtener el recibo de la transacción
+    const receipt = await provider.getTransactionReceipt(txHash);
+    if (!receipt) {
+      return res.status(404).json({ error: "Transacción no encontrada" });
+    }
+
+    if (receipt.status !== 1) {
+      return res.status(400).json({ error: "La transacción falló" });
+    }
+
+    // 2. Verificar que la transacción interactuó con el contrato USDT correcto
+    if (receipt.to?.toLowerCase() !== usdtContract.toLowerCase()) {
+      return res.status(400).json({ error: "La transacción no es al contrato USDT correcto" });
+    }
+
+    // 3. Obtener la wallet del usuario
+    const { data: wallet, error: walletError } = await supabaseAdmin
+      .from("user_wallets")
+      .select("address")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (walletError || !wallet?.address) {
+      return res.status(404).json({ error: "Wallet del usuario no encontrada" });
+    }
+
+    const userAddress = wallet.address.toLowerCase();
+
+    // 4. Parsear logs para encontrar el evento Transfer
+    const iface = new Interface(ERC20_ABI);
+    let transferLog = null;
+    let amount = null;
+
+    for (const log of receipt.logs) {
+      if (log.topics[0]?.toLowerCase() === TRANSFER_TOPIC0.toLowerCase()) {
+        try {
+          const parsed = iface.parseLog(log);
+          if (parsed?.args?.to?.toLowerCase() === userAddress) {
+            transferLog = log;
+            amount = parsed.args.value;
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    if (!transferLog || !amount) {
+      return res.status(400).json({ error: "No se encontró transferencia a la wallet del usuario" });
+    }
+
+    // 5. Obtener decimales del token
+    const tokenContract = new Contract(usdtContract, ERC20_ABI, provider);
+    const decimals = await tokenContract.decimals();
+    const amountStr = formatUnits(amount, decimals);
+    const parsedAmount = Number(amountStr);
+
+    console.log(`💰 Transferencia válida encontrada: ${parsedAmount} USDT`);
+
+    // 6. Verificar si ya fue procesada
+    const { data: existingTx, error: existingError } = await supabaseAdmin
+      .from("depositos_blockchain")
+      .select("id")
+      .eq("tx_hash", txHash)
+      .maybeSingle();
+
+    if (existingTx) {
+      return res.status(400).json({ error: "Esta transacción ya fue procesada" });
+    }
+
+    // 7. Registrar en depositos_blockchain
+    const { error: insertError } = await supabaseAdmin.from("depositos_blockchain").insert({
+      user_id: userId,
+      tx_hash: txHash,
+      to_address: userAddress,
+      amount: amountStr,
+      network: "BEP20-USDT",
+      token_symbol: "USDT",
+      status: "confirmed",
+      confirmations: receipt.confirmations || 0,
+    });
+
+    if (insertError) {
+      console.error("❌ Error insertando en depositos_blockchain:", insertError);
+      return res.status(500).json({ error: "Error al registrar la transacción" });
+    }
+
+    // 8. Acreditar saldo usando SELECT + UPDATE
+    try {
+      console.log(`💰 Consultando saldo actual para usuario ${userId}`);
+      
+      const { data: perfil, error: fetchError } = await supabaseAdmin
+        .from("perfiles")
+        .select("saldo_usdt")
+        .eq("id", userId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const saldoAnterior = Number(perfil.saldo_usdt || 0);
+      const nuevoSaldo = saldoAnterior + parsedAmount;
+
+      console.log(`💰 Actualizando saldo: ${saldoAnterior} -> ${nuevoSaldo}`);
+
+      const { error: updateError } = await supabaseAdmin
+        .from("perfiles")
+        .update({ saldo_usdt: nuevoSaldo })
+        .eq("id", userId);
+
+      if (updateError) throw updateError;
+
+      console.log(`✅ Depósito recuperado exitosamente. Nuevo saldo: ${nuevoSaldo}`);
+
+      return res.json({
+        ok: true,
+        message: "Depósito recuperado exitosamente",
+        amount: parsedAmount,
+        newBalance: nuevoSaldo,
+      });
+    } catch (error) {
+      console.error("❌ Error actualizando saldo:", error);
+      return res.status(500).json({ error: "Error al acreditar el saldo" });
+    }
+  } catch (error) {
+    console.error("❌ Error en /depositos/reclamar:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 });
