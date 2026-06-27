@@ -204,29 +204,40 @@ async function processDeposits() {
 
         if (insertDepositError || shouldIgnoreCredit) continue;
 
-        // Acreditar saldo directamente en perfiles usando UPDATE con raw SQL
+        // Acreditar saldo usando SELECT + UPDATE (supabaseAdmin.raw() no está soportado)
         const parsedAmount = Number(amountStr);
         console.log(`💰 Acreditando ${parsedAmount} USDT a usuario ${userId}`);
         
         try {
-          console.log(`💰 Intentando UPDATE en BD para usuario ${userId} con monto ${parsedAmount}`);
+          console.log(`💰 Consultando saldo actual para usuario ${userId}`);
           
-          const { error: balanceError } = await supabaseAdmin
+          // 1. Obtener saldo actual
+          const { data: perfil, error: fetchError } = await supabaseAdmin
             .from("perfiles")
-            .update({
-              saldo_usdt: supabaseAdmin.raw(`saldo_usdt + ${parsedAmount}`)
-            })
+            .select("saldo_usdt")
+            .eq("id", userId)
+            .single();
+
+          if (fetchError) throw fetchError;
+
+          // 2. Sumar en JS
+          const saldoAnterior = Number(perfil.saldo_usdt || 0);
+          const nuevoSaldo = saldoAnterior + parsedAmount;
+
+          console.log(`💰 Intentando UPDATE: ${saldoAnterior} -> ${nuevoSaldo}`);
+
+          // 3. Actualizar
+          const { error: updateError } = await supabaseAdmin
+            .from("perfiles")
+            .update({ saldo_usdt: nuevoSaldo })
             .eq("id", userId);
 
-          if (balanceError) {
-            console.error("❌ Error actualizando saldo:", balanceError);
-            continue;
-          }
+          if (updateError) throw updateError;
 
-          console.log(`✅ Depósito guardado exitosamente en BD`);
+          console.log(`✅ Depósito acreditado exitosamente. Nuevo saldo: ${nuevoSaldo}`);
           console.log(`✅ Depósito acreditado user=${userId} amount=${amountStr} tx=${txHash}`);
         } catch (error) {
-          console.error(`❌ CRASH al guardar el depósito:`, error);
+          console.error(`❌ CRASH al guardar el depósito:`, error.message);
           console.error(`❌ Stack trace:`, error?.stack);
         }
       }

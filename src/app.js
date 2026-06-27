@@ -10,9 +10,6 @@ import depositsRoutes from './routes/deposits.routes.js';
 import withdrawalsRoutes from './routes/withdrawals.routes.js';
 import depositsWebhook from './webhooks/deposits.webhook.js';
 import tatumWebhook from './webhooks/tatum.webhook.js';
-// Importar workers para que se ejecuten al iniciar el servidor
-import './workers/deposit.worker.js';
-import './workers/withdrawal.worker.js';
 
 dotenv.config();
 
@@ -62,6 +59,9 @@ process.on('uncaughtException', (error) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
+  // Importar workers dinámicamente DESPUÉS de que el servidor y las vars estén listos
+  await import('./workers/deposit.worker.js');
+  await import('./workers/withdrawal.worker.js');
 });
