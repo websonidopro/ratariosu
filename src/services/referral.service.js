@@ -47,7 +47,7 @@ export const processReferralCommissions = async (
     // Obtener información del comprador desde perfiles
     const { data: buyer, error: buyerError } = await supabaseAdmin
       .from("perfiles")
-      .select("id, mi_codigo, referred_by")
+      .select("id, mi_codigo, referido_por")
       .eq("id", userId)
       .maybeSingle();
 
@@ -64,7 +64,7 @@ export const processReferralCommissions = async (
     }
 
     // Si no tiene referido, no hay comisiones
-    const level1Id = buyer.referred_by ?? null;
+    const level1Id = buyer.referido_por ?? null;
     console.log("👤 Referido nivel 1:", level1Id);
     if (!level1Id) {
       console.log("ℹ️ Usuario sin referido, no se generan comisiones");
@@ -76,7 +76,7 @@ export const processReferralCommissions = async (
       console.log("🔍 Buscando patrocinador nivel 1:", level1Id);
       const { data: level1User, error: level1Error } = await supabaseAdmin
         .from("perfiles")
-        .select("id, mi_codigo, referred_by")
+        .select("id, mi_codigo, referido_por")
         .eq("id", level1Id)
         .maybeSingle();
 
@@ -98,13 +98,13 @@ export const processReferralCommissions = async (
       }
 
       // Procesar comisión Nivel 2
-      const level2Id = level1User?.referred_by ?? null;
+      const level2Id = level1User?.referido_por ?? null;
       console.log("👤 Referido nivel 2:", level2Id);
       if (level2Id) {
         console.log("🔍 Buscando patrocinador nivel 2:", level2Id);
         const { data: level2User, error: level2Error } = await supabaseAdmin
           .from("perfiles")
-          .select("id, mi_codigo, referred_by")
+          .select("id, mi_codigo, referido_por")
           .eq("id", level2Id)
           .maybeSingle();
 
@@ -126,7 +126,7 @@ export const processReferralCommissions = async (
         }
 
         // Procesar comisión Nivel 3
-        const level3Id = level2User?.referred_by ?? null;
+        const level3Id = level2User?.referido_por ?? null;
         console.log("👤 Referido nivel 3:", level3Id);
         if (level3Id) {
           console.log("🔍 Buscando patrocinador nivel 3:", level3Id);
