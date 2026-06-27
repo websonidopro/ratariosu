@@ -60,8 +60,8 @@ async function processWithdrawals() {
   const rpcUrl = String(process.env.BSC_RPC_URL || '').trim();
   const usdtContract = String(process.env.USDT_CONTRACT_BSC || '').trim();
   const confirmationsRequired = getEnvNumber("CONFIRMATIONS_REQUIRED", 1);
-  const mnemonic = String(process.env.BSC_MNEMONIC || '').trim();
-  const privateKey = String(process.env.BSC_PRIVATE_KEY || '').trim();
+  const mnemonic = String(process.env.BSC_MNEMONIC || process.env.MNEMONIC || '').trim();
+  const privateKey = String(process.env.BSC_PRIVATE_KEY || process.env.PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY || '').trim();
   const derivationPath = String(process.env.BSC_DERIVATION_PATH || "m/44'/60'/0'/0").trim();
 
   console.log("🔍 Debug Env Retiros:", { 

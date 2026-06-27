@@ -208,19 +208,27 @@ async function processDeposits() {
         const parsedAmount = Number(amountStr);
         console.log(`💰 Acreditando ${parsedAmount} USDT a usuario ${userId}`);
         
-        const { error: balanceError } = await supabaseAdmin
-          .from("perfiles")
-          .update({
-            saldo_usdt: supabaseAdmin.raw(`saldo_usdt + ${parsedAmount}`)
-          })
-          .eq("id", userId);
+        try {
+          console.log(`💰 Intentando UPDATE en BD para usuario ${userId} con monto ${parsedAmount}`);
+          
+          const { error: balanceError } = await supabaseAdmin
+            .from("perfiles")
+            .update({
+              saldo_usdt: supabaseAdmin.raw(`saldo_usdt + ${parsedAmount}`)
+            })
+            .eq("id", userId);
 
-        if (balanceError) {
-          console.error("❌ Error actualizando saldo:", balanceError);
-          continue;
+          if (balanceError) {
+            console.error("❌ Error actualizando saldo:", balanceError);
+            continue;
+          }
+
+          console.log(`✅ Depósito guardado exitosamente en BD`);
+          console.log(`✅ Depósito acreditado user=${userId} amount=${amountStr} tx=${txHash}`);
+        } catch (error) {
+          console.error(`❌ CRASH al guardar el depósito:`, error);
+          console.error(`❌ Stack trace:`, error?.stack);
         }
-
-        console.log(`✅ Depósito acreditado user=${userId} amount=${amountStr} tx=${txHash}`);
       }
     }
     lastProcessedBlock = toBlock;
