@@ -64,6 +64,17 @@ async function processWithdrawals() {
   const privateKey = String(process.env.BSC_PRIVATE_KEY || process.env.PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY || '').trim();
   const derivationPath = String(process.env.BSC_DERIVATION_PATH || "m/44'/60'/0'/0").trim();
 
+  // Dump de variables de entorno para identificar el nombre exacto en Railway
+  const envKeys = Object.keys(process.env);
+  const suspectKeys = envKeys.filter(key => 
+    key.includes('KEY') || 
+    key.includes('BSC') || 
+    key.includes('WALLET') || 
+    key.includes('MNEMONIC') ||
+    key.includes('PRIV')
+  );
+  console.log("🔍 DUMP DE VARIABLES EN RAILWAY (Solo nombres):", suspectKeys);
+
   console.log("🔍 Debug Env Retiros:", { 
     RPC: !!rpcUrl, 
     RPC_Value: rpcUrl ? rpcUrl.substring(0, 20) + "..." : "MISSING",
