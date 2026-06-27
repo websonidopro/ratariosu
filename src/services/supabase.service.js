@@ -11,6 +11,11 @@ if (!supabaseUrl || !supabaseServiceKey) {
   console.error("❌ Faltan credenciales de Supabase en el archivo .env");
 }
 
+console.log("🔧 Supabase Admin Config:");
+console.log("🔧 URL:", supabaseUrl ? "Configurada" : "MISSING");
+console.log("🔧 Service Key Prefijo:", supabaseServiceKey ? supabaseServiceKey.substring(0, 10) + "..." : "MISSING");
+console.log("🔧 Usando variable:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "SUPABASE_SERVICE_ROLE_KEY" : (process.env.SUPABASE_SERVICE_KEY ? "SUPABASE_SERVICE_KEY" : "NINGUNA"));
+
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,

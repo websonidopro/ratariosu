@@ -7,6 +7,9 @@ const generarCodigoUnico = () => {
   return `TZ-${caracteresAzar}`;
 };
 
+// --- FUNCIÓN AUXILIAR: Delay para evitar race condition ---
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // --- ENDPOINT: REGISTRO (Con lógica de referidos y control de errores) ---
 export const registerController = async (req, res) => {
   try {
@@ -59,7 +62,11 @@ export const registerController = async (req, res) => {
 
     if (authError) throw authError;
 
-    // 4. Actualizar la fila en perfiles creada por el Trigger SQL
+    // 4. Esperar a que el Trigger SQL termine de insertar la fila en perfiles
+    console.log("⏳ Esperando 500ms para que el Trigger SQL termine...");
+    await delay(500);
+
+    // 5. Actualizar la fila en perfiles creada por el Trigger SQL
     const { error: profileError } = await supabaseAdmin
       .from('perfiles')
       .update({
