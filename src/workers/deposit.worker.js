@@ -199,50 +199,67 @@ async function processDeposits() {
         const amountStr = formatUnits(value, decimalsCache);
         console.log(`💰 Monto formateado: ${amountStr} USDT (decimales: ${decimalsCache})`);
         
+        const parsedAmount = Number(amountStr);
         const ignoredFrom = getIgnoredFromAddresses();
         const shouldIgnoreCredit = Boolean(from && ignoredFrom.has(from));
 
-        const { error: insertChainError } = await supabaseAdmin.from("depositos_blockchain").insert({
-          user_id: userId, tx_hash: txHash, to_address: to, amount: amountStr, network: "BEP20-USDT", token_symbol: "USDT", status: "confirmed", confirmations: confirmationsRequired,
-        });
-
-        if (insertChainError && String(insertChainError.code) !== "23505") continue; // 23505 = duplicado
-
-        const { error: insertDepositError } = await supabaseAdmin.from("depositos").insert({
-          user_id: userId, hash_tx: txHash, monto: amountStr, token: "USDT", confirmado: true, network: "BEP20", credited: !shouldIgnoreCredit,
-          metadata: { to_address: to, source: shouldIgnoreCredit ? "internal_topup" : "deposit_worker" },
-        });
-
-        if (insertDepositError || shouldIgnoreCredit) continue;
-
-        // Acreditar saldo usando SELECT + UPDATE (supabaseAdmin.raw() no está soportado)
-        const parsedAmount = Number(amountStr);
-        console.log(`💰 Monto formateado: ${parsedAmount} USDT`);
-        
         try {
-          console.log(`� [DEBUG 1] Iniciando bloque try. Verificando supabaseAdmin:`, !!supabaseAdmin);
+          console.log(`🔍 [DEBUG 1] Iniciando procesamiento completo. Verificando supabaseAdmin:`, !!supabaseAdmin);
           
-          console.log(`🔍 [DEBUG 2] Ejecutando SELECT para usuario: ${userId}`);
+          // Insertar en depositos_blockchain
+          console.log(`🔍 [DEBUG 2] Insertando en depositos_blockchain...`);
+          const { error: insertChainError } = await supabaseAdmin.from("depositos_blockchain").insert({
+            user_id: userId, tx_hash: txHash, to_address: to, amount: amountStr, network: "BEP20-USDT", token_symbol: "USDT", status: "confirmed", confirmations: confirmationsRequired,
+          });
+
+          if (insertChainError && String(insertChainError.code) !== "23505") {
+            console.error(`❌ Error insertando en depositos_blockchain:`, insertChainError);
+            throw insertChainError;
+          }
+          console.log(`🔍 [DEBUG 3] depositos_blockchain insertado correctamente`);
+
+          // Insertar en depositos
+          console.log(`🔍 [DEBUG 4] Insertando en depositos...`);
+          const { error: insertDepositError } = await supabaseAdmin.from("depositos").insert({
+            user_id: userId, hash_tx: txHash, monto: amountStr, token: "USDT", confirmado: true, network: "BEP20", credited: !shouldIgnoreCredit,
+            metadata: { to_address: to, source: shouldIgnoreCredit ? "internal_topup" : "deposit_worker" },
+          });
+
+          if (insertDepositError) {
+            console.error(`❌ Error insertando en depositos:`, insertDepositError);
+            throw insertDepositError;
+          }
+          console.log(`� [DEBUG 5] depositos insertado correctamente`);
+
+          if (shouldIgnoreCredit) {
+            console.log(`⏭️ Crédito ignorado por dirección de origen`);
+            processedTxHashes.add(txHash);
+            return;
+          }
+
+          // SELECT para obtener saldo actual
+          console.log(`🔍 [DEBUG 6] Ejecutando SELECT para usuario: ${userId}`);
           const { data: perfil, error: fetchError } = await supabaseAdmin
             .from("perfiles")
             .select("saldo_usdt")
             .eq("id", userId)
             .single();
 
-          console.log(`🔍 [DEBUG 3] SELECT terminado. Error:`, fetchError?.message || 'Ninguno');
+          console.log(`🔍 [DEBUG 7] SELECT terminado. Error:`, fetchError?.message || 'Ninguno');
           if (fetchError) throw fetchError;
 
           const saldoAnterior = Number(perfil.saldo_usdt || 0);
           const nuevoSaldo = saldoAnterior + parsedAmount;
-          console.log(`� [DEBUG 4] Saldo calculado: ${saldoAnterior} + ${parsedAmount} = ${nuevoSaldo}`);
+          console.log(`🔍 [DEBUG 8] Saldo calculado: ${saldoAnterior} + ${parsedAmount} = ${nuevoSaldo}`);
 
-          console.log(`🔍 [DEBUG 5] Ejecutando UPDATE...`);
+          // UPDATE para acreditar saldo
+          console.log(`🔍 [DEBUG 9] Ejecutando UPDATE...`);
           const { error: updateError } = await supabaseAdmin
             .from("perfiles")
             .update({ saldo_usdt: nuevoSaldo })
             .eq("id", userId);
 
-          console.log(`🔍 [DEBUG 6] UPDATE terminado. Error:`, updateError?.message || 'Ninguno');
+          console.log(`🔍 [DEBUG 10] UPDATE terminado. Error:`, updateError?.message || 'Ninguno');
           if (updateError) throw updateError;
 
           console.log(`✅ EXITO TOTAL: Depósito de ${parsedAmount} guardado.`);
@@ -253,6 +270,7 @@ async function processDeposits() {
         } catch (error) {
           console.error(`❌ CRASH FATAL EN WORKER:`, error.message);
           console.error(`❌ Stack trace:`, error?.stack);
+          console.error(`❌ Detalles del error:`, error);
         }
       }
     }
