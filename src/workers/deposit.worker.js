@@ -218,19 +218,6 @@ async function processDeposits() {
           }
           console.log(`🔍 [DEBUG 3] depositos_blockchain insertado correctamente`);
 
-          // Insertar en depositos
-          console.log(`🔍 [DEBUG 4] Insertando en depositos...`);
-          const { error: insertDepositError } = await supabaseAdmin.from("depositos").insert({
-            user_id: userId, hash_tx: txHash, monto: amountStr, token: "USDT", confirmado: true, network: "BEP20", credited: !shouldIgnoreCredit,
-            metadata: { to_address: to, source: shouldIgnoreCredit ? "internal_topup" : "deposit_worker" },
-          });
-
-          if (insertDepositError) {
-            console.error(`❌ Error insertando en depositos:`, insertDepositError);
-            throw insertDepositError;
-          }
-          console.log(`� [DEBUG 5] depositos insertado correctamente`);
-
           if (shouldIgnoreCredit) {
             console.log(`⏭️ Crédito ignorado por dirección de origen`);
             processedTxHashes.add(txHash);
@@ -238,28 +225,28 @@ async function processDeposits() {
           }
 
           // SELECT para obtener saldo actual
-          console.log(`🔍 [DEBUG 6] Ejecutando SELECT para usuario: ${userId}`);
+          console.log(`🔍 [DEBUG 4] Ejecutando SELECT para usuario: ${userId}`);
           const { data: perfil, error: fetchError } = await supabaseAdmin
             .from("perfiles")
             .select("saldo_usdt")
             .eq("id", userId)
             .single();
 
-          console.log(`🔍 [DEBUG 7] SELECT terminado. Error:`, fetchError?.message || 'Ninguno');
+          console.log(`🔍 [DEBUG 5] SELECT terminado. Error:`, fetchError?.message || 'Ninguno');
           if (fetchError) throw fetchError;
 
           const saldoAnterior = Number(perfil.saldo_usdt || 0);
           const nuevoSaldo = saldoAnterior + parsedAmount;
-          console.log(`🔍 [DEBUG 8] Saldo calculado: ${saldoAnterior} + ${parsedAmount} = ${nuevoSaldo}`);
+          console.log(`🔍 [DEBUG 6] Saldo calculado: ${saldoAnterior} + ${parsedAmount} = ${nuevoSaldo}`);
 
           // UPDATE para acreditar saldo
-          console.log(`🔍 [DEBUG 9] Ejecutando UPDATE...`);
+          console.log(`🔍 [DEBUG 7] Ejecutando UPDATE...`);
           const { error: updateError } = await supabaseAdmin
             .from("perfiles")
             .update({ saldo_usdt: nuevoSaldo })
             .eq("id", userId);
 
-          console.log(`🔍 [DEBUG 10] UPDATE terminado. Error:`, updateError?.message || 'Ninguno');
+          console.log(`🔍 [DEBUG 8] UPDATE terminado. Error:`, updateError?.message || 'Ninguno');
           if (updateError) throw updateError;
 
           console.log(`✅ EXITO TOTAL: Depósito de ${parsedAmount} guardado.`);
