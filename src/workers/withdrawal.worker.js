@@ -61,10 +61,25 @@ async function processWithdrawals() {
   const usdtContract = String(process.env.USDT_CONTRACT_BSC || '').trim();
   const confirmationsRequired = getEnvNumber("CONFIRMATIONS_REQUIRED", 1);
   const mnemonic = String(process.env.BSC_MNEMONIC || '').trim();
+  const privateKey = String(process.env.BSC_PRIVATE_KEY || '').trim();
   const derivationPath = String(process.env.BSC_DERIVATION_PATH || "m/44'/60'/0'/0").trim();
 
-  if (!rpcUrl || !usdtContract || !mnemonic) {
-    console.error("❌ Worker retiros: faltan variables .env (BSC_RPC_URL, USDT_CONTRACT_BSC, BSC_MNEMONIC)");
+  console.log("🔍 Debug Env Retiros:", { 
+    RPC: !!rpcUrl, 
+    RPC_Value: rpcUrl ? rpcUrl.substring(0, 20) + "..." : "MISSING",
+    USDT: !!usdtContract,
+    USDT_Value: usdtContract ? usdtContract.substring(0, 20) + "..." : "MISSING",
+    MNEMONIC: !!mnemonic,
+    MNEMONIC_Value: mnemonic ? mnemonic.substring(0, 10) + "..." : "MISSING",
+    PRIVATE_KEY: !!privateKey,
+    PRIVATE_KEY_Value: privateKey ? privateKey.substring(0, 10) + "..." : "MISSING"
+  });
+
+  // Usar PRIVATE_KEY si MNEMONIC no está disponible
+  const authCredential = mnemonic || privateKey;
+
+  if (!rpcUrl || !usdtContract || !authCredential) {
+    console.error("❌ Worker retiros: faltan variables .env (BSC_RPC_URL, USDT_CONTRACT_BSC, BSC_MNEMONIC o BSC_PRIVATE_KEY)");
     running = false;
     return;
   }
@@ -78,10 +93,16 @@ async function processWithdrawals() {
 
   if (hdBaseNode == null) {
     try {
-      const root = HDNodeWallet.fromPhrase(mnemonic, undefined, 'm');
-      const normalizedPath = derivationPath.startsWith('m/') ? derivationPath : `m/${derivationPath.replace(/^\/+/, '')}`;
-      hdBaseNode = root.derivePath(normalizedPath);
+      // Usar PRIVATE_KEY si está disponible, sino MNEMONIC
+      if (privateKey) {
+        hdBaseNode = new Wallet(privateKey);
+      } else {
+        const root = HDNodeWallet.fromPhrase(mnemonic, undefined, 'm');
+        const normalizedPath = derivationPath.startsWith('m/') ? derivationPath : `m/${derivationPath.replace(/^\/+/, '')}`;
+        hdBaseNode = root.derivePath(normalizedPath);
+      }
     } catch (e) {
+      console.error("❌ Error inicializando wallet:", e?.message || e);
       running = false;
       return;
     }

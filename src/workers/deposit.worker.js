@@ -52,9 +52,25 @@ const toTopicAddress = (addr) => {
 
 const refreshWalletMap = async () => {
   console.log("🔍 Deposit worker: Refrescando mapa de wallets...");
+  
+  // Primero inspeccionar el esquema para encontrar el nombre correcto de la columna
+  const { data: sample, error: sampleError } = await supabaseAdmin
+    .from("user_wallets")
+    .select("*")
+    .limit(1);
+
+  if (sampleError) {
+    console.error("❌ Deposit worker: error inspeccionando user_wallets:", sampleError.message);
+    return;
+  }
+
+  if (sample && sample.length > 0) {
+    console.log("🔍 Deposit worker: Muestra de user_wallets:", Object.keys(sample[0]));
+  }
+
   const { data, error } = await supabaseAdmin
     .from("user_wallets")
-    .select("user_id, deposit_address, address") // Verificar ambas columnas
+    .select("user_id, address") // Usar 'address' ya que deposit_address no existe
     .limit(10000);
 
   if (error) {
@@ -65,8 +81,7 @@ const refreshWalletMap = async () => {
   console.log("🔍 Deposit worker: Wallets encontradas:", data?.length || 0);
   const next = new Map();
   for (const row of data ?? []) {
-    // Priorizar deposit_address, fallback a address
-    const addr = String(row?.deposit_address || row?.address || "").trim().toLowerCase();
+    const addr = String(row?.address || "").trim().toLowerCase();
     const userId = row?.user_id;
     if (!addr || !userId) continue;
     next.set(addr, userId);
