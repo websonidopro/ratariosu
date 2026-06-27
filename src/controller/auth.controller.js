@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { supabaseAdmin } from "../services/supabase.service.js";
+import { supabaseAdmin, supabaseAuthClient } from "../services/supabase.service.js";
 
 // --- FUNCIÓN AUXILIAR: Código criptográfico ---
 const generarCodigoUnico = () => {
@@ -19,7 +19,7 @@ export const registerController = async (req, res) => {
       return res.status(400).json({ error: "El correo y la contraseña son obligatorios." });
     }
 
-    // 1. Contamos cuántos usuarios existen
+    // 1. Contamos cuántos usuarios existen (usando admin para operación administrativa)
     const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) throw listError;
     
@@ -45,10 +45,10 @@ export const registerController = async (req, res) => {
       referidorId = referidor.id; 
     }
 
-    // 3. Creamos el usuario en Auth
+    // 3. Creamos el usuario en Auth (usando supabaseAuthClient para no contaminar supabaseAdmin)
     const nuevoCodigo = generarCodigoUnico();
     
-    const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
+    const { data: authData, error: authError } = await supabaseAuthClient.auth.signUp({
       email,
       password,
       options: {
@@ -109,7 +109,7 @@ export const loginController = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    const { data, error } = await supabaseAuthClient.auth.signInWithPassword({
       email,
       password
     });
