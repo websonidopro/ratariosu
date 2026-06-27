@@ -100,7 +100,7 @@ export const buyPlanController = async (req, res) => {
     const { data: inversion, error: inversionError } = await supabaseAdmin
       .from('inversiones_usuarios')
       .insert({
-        usuario_id: userId,
+        user_id: userId,
         plan_id: plan_id,
         monto_invertido: planPrecio,
         ganancia_diaria: planGananciaDiaria,
@@ -163,7 +163,7 @@ export const operarController = async (req, res) => {
           ganancia_diaria
         )
       `)
-      .eq('usuario_id', userId)
+      .eq('user_id', userId)
       .eq('activa', true);
 
     if (inversionesError) {

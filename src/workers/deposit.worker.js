@@ -170,7 +170,7 @@ async function processDeposits() {
         if (insertChainError && String(insertChainError.code) !== "23505") continue; // 23505 = duplicado
 
         const { error: insertDepositError } = await supabaseAdmin.from("depositos").insert({
-          usuario_id: userId, hash_tx: txHash, monto: amountStr, token: "USDT", confirmado: true, network: "BEP20", credited: !shouldIgnoreCredit,
+          user_id: userId, hash_tx: txHash, monto: amountStr, token: "USDT", confirmado: true, network: "BEP20", credited: !shouldIgnoreCredit,
           metadata: { to_address: to, source: shouldIgnoreCredit ? "internal_topup" : "deposit_worker" },
         });
 

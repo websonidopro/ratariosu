@@ -31,7 +31,7 @@ const hasActivePlan = async (userId) => {
   const { data, error } = await supabaseAdmin
     .from('inversiones_usuarios')
     .select('id')
-    .eq('usuario_id', userId)
+    .eq('user_id', userId)
     .eq('activa', true)
     .or(`fecha_expiracion.is.null,fecha_expiracion.gt.${nowIso}`)
     .limit(1);
@@ -53,7 +53,7 @@ router.get('/withdraw/me', authMiddleware, async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('historial_transacciones')
       .select('*')
-      .eq('usuario_id', userId)
+      .eq('user_id', userId)
       .eq('tipo', 'retiro')
       .order('created_at', { ascending: false })
       .limit(50);
@@ -228,7 +228,7 @@ router.post("/withdraw/validate", authMiddleware, async (req, res) => {
     const { data: pendienteRows, error: pendienteErr } = await supabaseAdmin
       .from("historial_transacciones")
       .select("id")
-      .eq("usuario_id", userId)
+      .eq("user_id", userId)
       .eq("tipo", "retiro")
       .in("estado", ["pendiente", "procesando"])
       .limit(1);
@@ -319,7 +319,7 @@ router.post("/withdraw/create", authMiddleware, async (req, res) => {
     const { data: activeRows, error: activeErr } = await supabaseAdmin
       .from("historial_transacciones")
       .select("id")
-      .eq("usuario_id", userId)
+      .eq("user_id", userId)
       .eq("tipo", "retiro")
       .in("estado", ["pendiente", "procesando"])
       .limit(1);
@@ -340,7 +340,7 @@ router.post("/withdraw/create", authMiddleware, async (req, res) => {
       const { error: insertError } = await supabaseAdmin
         .from("historial_transacciones")
         .insert({
-          usuario_id: userId,
+          user_id: userId,
           tipo: "retiro",
           referencia_id: normalizedDireccion,
           referencia_tipo: "direccion_wallet",

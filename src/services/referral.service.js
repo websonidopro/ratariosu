@@ -199,7 +199,7 @@ const grantCommission = async (
       const { error: historyError } = await supabaseAdmin
         .from("historial_transacciones")
         .insert({
-          usuario_id: referrerId,
+          user_id: referrerId,
           tipo: `comision_nivel_${level}`,
           referencia_id: referenciaId,
           referencia_tipo: referenciaTipo,

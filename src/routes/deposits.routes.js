@@ -21,7 +21,7 @@ router.get("/deposits/me", authMiddleware, async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from("historial_transacciones")
       .select("*")
-      .eq("usuario_id", userId)
+      .eq("user_id", userId)
       .eq("tipo", "deposito")
       .order("created_at", { ascending: false })
       .limit(50);
@@ -232,7 +232,7 @@ router.post("/deposits/webhook", async (req, res) => {
     // Registrar en historial_transacciones
     try {
       await supabaseAdmin.from("historial_transacciones").insert({
-        usuario_id: resolvedUserId,
+        user_id: resolvedUserId,
         tipo: "deposito",
         referencia_id: normalizedTxHash,
         referencia_tipo: "blockchain",

@@ -59,19 +59,30 @@ export const registerController = async (req, res) => {
 
     if (authError) throw authError;
 
-    // 4. Guardamos en la tabla pública perfiles (CON CONTROL DE ERRORES REAL)
-    const { error: profileError } = await supabaseAdmin.from('perfiles').insert([{
-      id: authData.user.id,
-      nombre: nombre || "Granjero",
-      email: email,
-      mi_codigo: nuevoCodigo,
-      referido_por: referidorId
-    }]);
+    // 4. Actualizar la fila en perfiles creada por el Trigger SQL
+    const { error: profileError } = await supabaseAdmin
+      .from('perfiles')
+      .update({
+        nombre: nombre || "Granjero",
+        referido_por: referidorId
+      })
+      .eq('id', authData.user.id);
 
-    // Si la tabla falla, detenemos todo y avisamos qué pasó en la terminal
+    // Si el UPDATE falla, logueamos pero no detenemos todo (el usuario ya existe en Auth)
     if (profileError) {
-      console.error("❌ ERROR CRÍTICO EN TABLA PERFILES:", profileError);
-      return res.status(500).json({ error: `Error en base de datos: ${profileError.message}` });
+      console.error("❌ ERROR actualizando perfiles:", profileError);
+      // Intentamos recuperar con un select para ver si la fila existe
+      const { data: existingProfile } = await supabaseAdmin
+        .from('perfiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+      
+      console.log("🔍 Perfil existente:", existingProfile);
+      
+      if (!existingProfile) {
+        return res.status(500).json({ error: `Error en base de datos: ${profileError.message}` });
+      }
     }
 
     return res.json({ 

@@ -91,7 +91,7 @@ async function processWithdrawals() {
 
   // Consulta limpia y directa a Supabase (reemplaza el RPC fallido)
   const { data: rows, error } = await supabaseAdmin.from("retiros")
-    .select("id, usuario_id, monto, red, direccion, total, estado")
+    .select("id, user_id, monto, red, direccion, total, estado")
     .in("estado", ["pendiente", "aprobado"]).limit(1);
 
   const row = Array.isArray(rows) && rows.length ? rows[0] : null;
@@ -117,7 +117,7 @@ async function processWithdrawals() {
 
   let senderWallet = null;
   try {
-    const { data: walletRow } = await supabaseAdmin.from('user_wallets').select('address, unique_tag').eq('user_id', row.usuario_id).single();
+    const { data: walletRow } = await supabaseAdmin.from('user_wallets').select('address, unique_tag').eq('user_id', row.user_id).single();
     const idx = Number.parseInt(String(walletRow?.unique_tag ?? ''), 10);
     const derived = hdBaseNode.deriveChild(idx);
     senderWallet = derived.connect(provider);

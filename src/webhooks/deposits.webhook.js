@@ -69,7 +69,7 @@ router.post("/deposit/webhook", async (req, res) => {
 
     // Insertar en la nueva estructura de la tabla
     const { error: insertError } = await supabaseAdmin.from("depositos").insert({
-      usuario_id: userId,
+      user_id: userId,
       monto: parsedAmount,
       hash_tx: tx_hash,
       token: "USDT",

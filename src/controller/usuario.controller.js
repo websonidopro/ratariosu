@@ -56,7 +56,7 @@ export const getPerfilController = async (req, res) => {
     const { data: inversiones } = await supabaseAdmin
       .from('inversiones_usuarios')
       .select('*, planes_animales(nombre)')
-      .eq('usuario_id', user.id);
+      .eq('user_id', user.id);
 
     return res.json({
       ok: true,
