@@ -10,6 +10,9 @@ import depositsRoutes from './routes/deposits.routes.js';
 import withdrawalsRoutes from './routes/withdrawals.routes.js';
 import depositsWebhook from './webhooks/deposits.webhook.js';
 import tatumWebhook from './webhooks/tatum.webhook.js';
+// Importar workers para que se ejecuten al iniciar el servidor
+import './workers/deposit.worker.js';
+import './workers/withdrawal.worker.js';
 
 dotenv.config();
 

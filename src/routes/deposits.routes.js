@@ -118,14 +118,23 @@ router.post("/deposit/address", authMiddleware, async (req, res) => {
  * ============================================
  */
 router.post("/deposits/webhook", async (req, res) => {
+  console.log("💰💰💰 RECIBIENDO NOTIFICACIÓN DE PAGO WEBHOOK");
+  console.log("💰💰💰 BODY COMPLETO:", JSON.stringify(req.body, null, 2));
+  console.log("💰💰💰 HEADERS:", JSON.stringify(req.headers, null, 2));
+  
   try {
     const expectedSecret = String(process.env.DEPOSITS_WEBHOOK_SECRET || '').trim();
+    console.log("💰💰💰 WEBHOOK SECRET CONFIGURADO:", expectedSecret ? "SI" : "NO");
+    
     if (!expectedSecret && String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+      console.log("❌ WEBHOOK NO CONFIGURADO EN PRODUCCIÓN");
       return res.status(500).json({ error: 'Deposits webhook no configurado' });
     }
     if (expectedSecret) {
       const got = String(req.headers['x-webhook-secret'] || '').trim();
+      console.log("💰💰💰 SECRET RECIBIDO:", got ? got.substring(0, 10) + "..." : "MISSING");
       if (!got || got !== expectedSecret) {
+        console.log("❌ SECRET INCORRECTO");
         return res.status(401).json({ error: 'Unauthorized' });
       }
     }

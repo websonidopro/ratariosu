@@ -51,9 +51,10 @@ const toTopicAddress = (addr) => {
 };
 
 const refreshWalletMap = async () => {
+  console.log("🔍 Deposit worker: Refrescando mapa de wallets...");
   const { data, error } = await supabaseAdmin
     .from("user_wallets")
-    .select("user_id, address") // Adaptado a la nueva columna "address"
+    .select("user_id, deposit_address, address") // Verificar ambas columnas
     .limit(10000);
 
   if (error) {
@@ -61,14 +62,18 @@ const refreshWalletMap = async () => {
     return;
   }
 
+  console.log("🔍 Deposit worker: Wallets encontradas:", data?.length || 0);
   const next = new Map();
   for (const row of data ?? []) {
-    const addr = String(row?.address ?? "").trim().toLowerCase();
+    // Priorizar deposit_address, fallback a address
+    const addr = String(row?.deposit_address || row?.address || "").trim().toLowerCase();
     const userId = row?.user_id;
     if (!addr || !userId) continue;
     next.set(addr, userId);
+    console.log(`🔍 Deposit worker: Mapeando ${addr.substring(0, 10)}... -> user ${userId}`);
   }
   walletMap = next;
+  console.log("🔍 Deposit worker: Mapa actualizado con", walletMap.size, "direcciones");
 };
 
 async function processDeposits() {
@@ -151,15 +156,23 @@ async function processDeposits() {
         try { parsed = iface.parseLog(log); } catch { continue; }
 
         const from = normalizeAddr(parsed?.args?.from);
-        const to = String(parsed?.args?.to ?? "").trim().toLowerCase();
+        const to = normalizeAddr(parsed?.args?.to); // Ya normaliza a minúsculas
         const userId = walletMap.get(to);
-        if (!userId) continue;
+        
+        if (!userId) {
+          console.log(`⚠️ Dirección ${to.substring(0, 10)}... no encontrada en walletMap`);
+          continue;
+        }
+
+        console.log(`✅ Match encontrado: ${to.substring(0, 10)}... -> user ${userId}`);
 
         const txHash = String(log.transactionHash || "").trim();
         if (!txHash) continue;
 
         const value = parsed?.args?.value;
         const amountStr = formatUnits(value, decimalsCache);
+        console.log(`💰 Monto formateado: ${amountStr} USDT (decimales: ${decimalsCache})`);
+        
         const ignoredFrom = getIgnoredFromAddresses();
         const shouldIgnoreCredit = Boolean(from && ignoredFrom.has(from));
 
@@ -176,8 +189,21 @@ async function processDeposits() {
 
         if (insertDepositError || shouldIgnoreCredit) continue;
 
-        const { error: rpcError } = await supabaseAdmin.rpc("increment_user_balance", { userid: userId, amountdelta: Number(amountStr) });
-        if (rpcError) continue;
+        // Acreditar saldo directamente en perfiles usando UPDATE con raw SQL
+        const parsedAmount = Number(amountStr);
+        console.log(`💰 Acreditando ${parsedAmount} USDT a usuario ${userId}`);
+        
+        const { error: balanceError } = await supabaseAdmin
+          .from("perfiles")
+          .update({
+            saldo_usdt: supabaseAdmin.raw(`saldo_usdt + ${parsedAmount}`)
+          })
+          .eq("id", userId);
+
+        if (balanceError) {
+          console.error("❌ Error actualizando saldo:", balanceError);
+          continue;
+        }
 
         console.log(`✅ Depósito acreditado user=${userId} amount=${amountStr} tx=${txHash}`);
       }
