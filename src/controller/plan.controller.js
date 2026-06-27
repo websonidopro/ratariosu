@@ -5,13 +5,8 @@ import { processReferralCommissions } from "../services/referral.service.js";
 export const getPlanesController = async (req, res) => {
   try {
     console.log("🔍 Consultando planes_animales...");
-    console.log("🔍 Supabase URL:", process.env.SUPABASE_URL ? "Configurada" : "NO CONFIGURADA");
-    console.log("🔍 Service Key:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "Configurada" : "NO CONFIGURADA");
-    console.log("🔍 Verificando Rol de Supabase:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { data, error } = await supabaseAdmin
-      .from('planes_animales')
-      .select('*')
-      .order('precio', { ascending: true });
+    console.log("� Prefijo Llave:", process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) + "..." : "MISSING");
+    const { data, error } = await supabaseAdmin.from('planes_animales').select('*');
 
     console.log("📊 Resultado de Supabase:", { data, error });
     console.log("📊 Cantidad de planes:", data?.length || 0);
