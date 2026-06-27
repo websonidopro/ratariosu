@@ -5,7 +5,8 @@ import { processReferralCommissions } from "../services/referral.service.js";
 export const getPlanesController = async (req, res) => {
   try {
     console.log("🔍 Consultando planes_animales...");
-    console.log("� Prefijo Llave:", process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) + "..." : "MISSING");
+    console.log("🔑 Prefijo Llave:", process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) + "..." : "MISSING");
+    console.log("⚠️ Verificación de llaves - ¿Son idénticas?:", process.env.SUPABASE_ANON_KEY === process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { data, error } = await supabaseAdmin.from('planes_animales').select('*');
 
     console.log("📊 Resultado de Supabase:", { data, error });
