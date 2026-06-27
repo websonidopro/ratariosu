@@ -12,6 +12,7 @@ let running = false;
 let decimalsCache = null;
 let walletMap = new Map();
 let lastProcessedBlock = null;
+let processedTxHashes = new Set(); // Set en memoria para evitar duplicados
 
 const normalizeAddr = (addr) => {
   const a = String(addr || '').trim().toLowerCase();
@@ -139,8 +140,12 @@ async function processDeposits() {
       return;
     }
 
-    const fromBlock = lastProcessedBlock + 1;
+    // Escanear con solapamiento de seguridad: desde 50 bloques atrás para cubrir lag del RPC
+    const safeFromBlock = Math.max(lastProcessedBlock - 50, targetBlock - 500);
+    const fromBlock = safeFromBlock;
     const toBlock = Math.min(fromBlock + scanBatchBlocks, targetBlock);
+    
+    console.log(`🔍 Escaneando bloques ${fromBlock} -> ${toBlock} (lastProcessed: ${lastProcessedBlock})`);
     const iface = new Interface(ERC20_ABI);
     const addresses = Array.from(walletMap.keys());
     const addressTopics = addresses.map(toTopicAddress).filter((t) => typeof t === "string" && t.startsWith("0x"));
@@ -183,6 +188,12 @@ async function processDeposits() {
 
         const txHash = String(log.transactionHash || "").trim();
         if (!txHash) continue;
+
+        // Protección contra duplicados por solapamiento de bloques
+        if (processedTxHashes.has(txHash)) {
+          console.log(`⏭️ Transacción ${txHash.substring(0, 10)}... ya procesada, saltando`);
+          continue;
+        }
 
         const value = parsed?.args?.value;
         const amountStr = formatUnits(value, decimalsCache);
@@ -236,6 +247,9 @@ async function processDeposits() {
 
           console.log(`✅ EXITO TOTAL: Depósito de ${parsedAmount} guardado.`);
           console.log(`✅ Depósito acreditado user=${userId} amount=${amountStr} tx=${txHash}`);
+          
+          // Marcar txHash como procesado en memoria
+          processedTxHashes.add(txHash);
         } catch (error) {
           console.error(`❌ CRASH FATAL EN WORKER:`, error.message);
           console.error(`❌ Stack trace:`, error?.stack);
