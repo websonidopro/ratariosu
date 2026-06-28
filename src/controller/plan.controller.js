@@ -148,113 +148,153 @@ export const buyPlanController = async (req, res) => {
 export const operarController = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { inversion_id } = req.body;
 
-    // Obtener todas las inversiones activas del usuario
-    const { data: inversiones, error: inversionesError } = await supabaseAdmin
+    if (!inversion_id) {
+      return res.status(400).json({ error: "El ID de la inversión es requerido" });
+    }
+
+    // Paso 1: Validación - Obtener inversión específica del usuario
+    const { data: inversion, error: inversionError } = await supabaseAdmin
       .from('inversiones_usuarios')
       .select(`
         id,
-        last_claim_date,
-        planes_animales (
-          id,
-          ganancia_diaria
-        )
+        plan_id,
+        ganancia_acumulada,
+        ultimo_cobro,
+        last_claim_date
       `)
+      .eq('id', inversion_id)
       .eq('user_id', userId)
-      .eq('activa', true);
+      .eq('estado', 'activo')
+      .maybeSingle();
 
-    if (inversionesError) {
-      console.error("❌ Error obteniendo inversiones:", inversionesError);
-      return res.status(500).json({ error: "Error al obtener tus inversiones" });
+    if (inversionError) {
+      console.error("❌ Error obteniendo inversión:", inversionError);
+      return res.status(500).json({ error: "Error al obtener tu inversión" });
     }
 
-    if (!inversiones || inversiones.length === 0) {
-      return res.status(400).json({ error: "No tienes planes activos para operar" });
+    if (!inversion) {
+      return res.status(404).json({ error: "Inversión no encontrada o no activa" });
     }
 
-    const now = new Date();
+    // Candado de tiempo: Validar si ya operó hoy
+    const lastClaimDate = inversion.last_claim_date ? new Date(inversion.last_claim_date) : null;
+    const today = new Date();
+    
+    if (lastClaimDate) {
+      const isSameDay = 
+        lastClaimDate.getFullYear() === today.getFullYear() &&
+        lastClaimDate.getMonth() === today.getMonth() &&
+        lastClaimDate.getDate() === today.getDate();
+      
+      if (isSameDay) {
+        return res.status(400).json({ 
+          error: 'Ya has reclamado las ganancias de este plan por el día de hoy. Vuelve mañana.' 
+        });
+      }
+    }
+
     let totalGanancia = 0;
     const detalles = [];
 
-    // Calcular ganancias para cada inversión
-    for (const inversion of inversiones) {
-      const lastClaim = inversion.last_claim_date ? new Date(inversion.last_claim_date) : inversion.created_at ? new Date(inversion.created_at) : null;
-      
-      if (!lastClaim) {
-        console.log("⚠️ Inversión sin fecha de creación:", inversion.id);
-        continue;
-      }
+    // Paso 2: Obtener ganancia_diaria desde planes_animales
+    const { data: plan, error: planError } = await supabaseAdmin
+      .from('planes_animales')
+      .select('ganancia_diaria')
+      .eq('id', inversion.plan_id)
+      .maybeSingle();
 
-      // Calcular días transcurridos (mínimo 1 día si ya pasó tiempo)
-      const diffTime = now - lastClaim;
-      const diffDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-
-      const gananciaDiaria = Number(inversion.planes_animales?.ganancia_diaria || 0);
-      if (gananciaDiaria <= 0) {
-        console.log("⚠️ Plan sin ganancia diaria:", inversion.planes_animales?.id);
-        continue;
-      }
-
-      const gananciaCalculada = gananciaDiaria * diffDays;
-      totalGanancia += gananciaCalculada;
-
-      detalles.push({
-        inversion_id: inversion.id,
-        plan_nombre: inversion.planes_animales?.id || 'Desconocido',
-        dias_acumulados: diffDays,
-        ganancia_diaria: gananciaDiaria,
-        ganancia_total: gananciaCalculada
-      });
-
-      // Actualizar last_claim_date de esta inversión
-      const { error: updateError } = await supabaseAdmin
-        .from('inversiones_usuarios')
-        .update({ last_claim_date: now.toISOString() })
-        .eq('id', inversion.id);
-
-      if (updateError) {
-        console.error("❌ Error actualizando last_claim_date:", updateError);
-      }
+    if (planError || !plan) {
+      console.error("❌ Error obteniendo plan:", planError);
+      return res.status(500).json({ error: "Error al obtener el plan" });
     }
 
-    if (totalGanancia <= 0) {
-      return res.status(400).json({ error: "No hay ganancias disponibles para recolectar" });
+    const gananciaDiaria = Number(plan.ganancia_diaria || 0);
+    if (gananciaDiaria <= 0) {
+      return res.status(400).json({ error: "El plan no tiene ganancia diaria configurada" });
     }
 
-    // Sumar ganancias al saldo_usdt del usuario
+    totalGanancia = gananciaDiaria;
+
+    detalles.push({
+      inversion_id: inversion.id,
+      plan_id: inversion.plan_id,
+      ganancia_diaria: gananciaDiaria,
+    });
+
+    // Paso 4: Actualizar inversiones_usuarios
+    const nuevaGananciaAcumulada = Number(inversion.ganancia_acumulada || 0) + gananciaDiaria;
+    const now = new Date().toISOString();
+
+    const { error: updateInversionError } = await supabaseAdmin
+      .from('inversiones_usuarios')
+      .update({
+        ganancia_acumulada: nuevaGananciaAcumulada,
+        ultimo_cobro: now,
+        last_claim_date: now,
+      })
+      .eq('id', inversion.id);
+
+    if (updateInversionError) {
+      console.error("❌ Error actualizando inversión:", updateInversionError);
+      return res.status(500).json({ error: "Error al actualizar la inversión" });
+    }
+
+    // Paso 3: Actualizar perfiles.saldo_usdt usando SELECT + UPDATE
+    const { data: perfil, error: fetchError } = await supabaseAdmin
+      .from('perfiles')
+      .select('saldo_usdt')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (fetchError || !perfil) {
+      console.error("❌ Error obteniendo perfil:", fetchError);
+      return res.status(500).json({ error: "Error al obtener tu perfil" });
+    }
+
+    const saldoActual = Number(perfil.saldo_usdt || 0);
+    const nuevoSaldo = saldoActual + totalGanancia;
+
     const { error: updateSaldoError } = await supabaseAdmin
       .from('perfiles')
-      .update({
-        ganancias_usdt: supabaseAdmin.raw(`ganancias_usdt + ${totalGanancia}`)
-      })
+      .update({ saldo_usdt: nuevoSaldo })
       .eq('id', userId);
 
     if (updateSaldoError) {
-      console.error("❌ Error actualizando ganancias_usdt:", updateSaldoError);
-      return res.status(500).json({ error: "Error al actualizar tu saldo de ganancias" });
+      console.error("❌ Error actualizando saldo:", updateSaldoError);
+      return res.status(500).json({ error: "Error al actualizar tu saldo" });
     }
 
-    // Obtener nuevo saldo
-    const { data: perfil, error: perfilError } = await supabaseAdmin
-      .from('perfiles')
-      .select('ganancias_usdt')
-      .eq('id', userId)
-      .single();
+    // Paso 5: Insertar en historial_transacciones
+    try {
+      const { error: historyError } = await supabaseAdmin
+        .from('historial_transacciones')
+        .insert({
+          user_id: userId,
+          tipo: 'ganancia_operacion',
+          monto: totalGanancia,
+          descripcion: `Ganancia operativa de ${totalGanancia} USDT`,
+        });
 
-    if (perfilError) {
-      console.error("❌ Error obteniendo perfil actualizado:", perfilError);
+      if (historyError) {
+        console.error("❌ Error insertando en historial_transacciones:", historyError);
+      }
+    } catch (historyErr) {
+      console.log("⚠️ Tabla historial_transacciones no disponible, continuando...");
     }
 
     return res.json({
       ok: true,
       message: `Has recolectado ${totalGanancia.toFixed(2)} USDT en ganancias`,
       total_ganancia: totalGanancia,
-      nuevo_saldo_ganancias: perfil?.ganancias_usdt || 0,
+      nuevo_saldo: nuevoSaldo,
       detalles
     });
 
   } catch (err) {
     console.error("❌ Error en operarController:", err);
+    console.error("❌ Stack trace:", err.stack);
     return res.status(500).json({ error: "Error interno al procesar la operación" });
   }
 };
