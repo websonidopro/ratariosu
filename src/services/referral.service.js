@@ -200,11 +200,9 @@ const grantCommission = async (
         .from("historial_transacciones")
         .insert({
           user_id: referrerId,
-          tipo: `comision_nivel_${level}`,
-          referencia_id: referenciaId,
-          referencia_tipo: referenciaTipo,
+          tipo: `comision_referido`,
           monto: commissionAmount,
-          created_at: new Date().toISOString(),
+          descripcion: `Comisión por referido nivel ${level}`,
         });
 
       if (historyError) {
@@ -246,45 +244,6 @@ const grantCommission = async (
     if (updateError) {
       console.error("❌ Error actualizando saldo del patrocinador:", updateError);
       throw updateError;
-    }
-
-    // 3. Registrar en tabla commissions (si existe)
-    try {
-      const commissionId = getCommissionId({
-        referrerId,
-        buyerId,
-        level,
-        referenciaId,
-        referenciaTipo,
-      });
-
-      const { error: insertCommissionErr } = await supabaseAdmin
-        .from("commissions")
-        .insert({
-          id: commissionId,
-          user_id: referrerId,
-          from_user_id: buyerId,
-          amount: commissionAmount,
-          level,
-          referencia_tipo: referenciaTipo,
-          referencia_id: referenciaId,
-          created_at: new Date().toISOString(),
-        });
-
-      if (insertCommissionErr) {
-        const code = String(insertCommissionErr.code ?? "");
-        const msg = String(insertCommissionErr.message ?? "").toLowerCase();
-        if (code === "23505" || msg.includes("duplicate") || msg.includes("unique")) {
-          console.log("ℹ️ Comisión duplicada, ignorando...");
-          return;
-        }
-        if (!msg.includes('relation') || !msg.includes('does not exist')) {
-          console.error("❌ Error insertando en commissions:", insertCommissionErr);
-        }
-      }
-    } catch (commErr) {
-      // Ignorar si la tabla no existe
-      console.log("⚠️ Tabla commissions no disponible, continuando...");
     }
 
     console.log(`✅ Comisión nivel ${level} otorgada: ${commissionAmount} USDT a ${referrerId}`);
