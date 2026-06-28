@@ -134,7 +134,7 @@ export const buyPlanController = async (req, res) => {
       message: "¡Plan adquirido con éxito!",
       inversion_id: inversion.id,
       new_balance: nuevoSaldo,
-      expires_at: fechaExpiracion.toISOString()
+      expires_at: fechaFin.toISOString()
     });
 
   } catch (err) {
