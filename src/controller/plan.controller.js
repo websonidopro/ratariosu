@@ -90,20 +90,21 @@ export const buyPlanController = async (req, res) => {
 
     // Paso 5: Registrar Inversión
     console.log("📝 Paso 5: Registrando inversión...");
-    const fechaExpiracion = new Date();
-    fechaExpiracion.setDate(fechaExpiracion.getDate() + planDuracion);
+    const fechaFin = new Date();
+    fechaFin.setDate(fechaFin.getDate() + 75); // Todos los planes duran 75 días
 
     const { data: inversion, error: inversionError } = await supabaseAdmin
       .from('inversiones_usuarios')
       .insert({
         user_id: userId,
         plan_id: plan_id,
-        monto_invertido: planPrecio,
-        ganancia_diaria: planGananciaDiaria,
-        activa: true,
-        created_at: new Date().toISOString(),
+        precio_pagado: planPrecio,
+        ganancia_acumulada: 0,
+        estado: 'activo',
+        fecha_inicio: new Date().toISOString(),
+        ultimo_cobro: null,
+        fecha_fin: fechaFin.toISOString(),
         last_claim_date: new Date().toISOString(),
-        fecha_expiracion: fechaExpiracion.toISOString(),
       })
       .select()
       .single();
