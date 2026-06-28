@@ -58,10 +58,29 @@ export const getPerfilController = async (req, res) => {
       .select('*, planes_animales(nombre)')
       .eq('user_id', user.id);
 
+    // Calcular ganancias de planes (suma de ganancia_acumulada)
+    const gananciasPlanes = inversiones?.reduce((sum, inv) => {
+      return sum + (Number(inv.ganancia_acumulada) || 0);
+    }, 0) || 0;
+
+    // Calcular comisiones de referidos desde historial_transacciones
+    const { data: comisiones } = await supabaseAdmin
+      .from('historial_transacciones')
+      .select('monto')
+      .eq('user_id', user.id)
+      .eq('tipo', 'comision_referido');
+
+    const totalComisiones = comisiones?.reduce((sum, com) => {
+      return sum + (Number(com.monto) || 0);
+    }, 0) || 0;
+
+    // Ganancias totales = ganancias de planes + comisiones de referidos
+    const gananciaTotal = gananciasPlanes + totalComisiones;
+
     return res.json({
       ok: true,
       inversiones: inversiones || [],
-      gananciaTotal: perfil?.ganancias_usdt || "0.00",
+      gananciaTotal: gananciaTotal.toFixed(2),
       user: {
         nombre: perfil?.nombre || "Granjero",
         codigo: perfil?.mi_codigo || "SIN-CODIGO"
