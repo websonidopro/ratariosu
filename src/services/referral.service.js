@@ -218,26 +218,34 @@ const grantCommission = async (
       console.log("⚠️ Tabla historial_transacciones no disponible, continuando...");
     }
 
-    // 2. Sumar comisión al saldo_usdt del patrocinador usando RPC
-    const { error: rpcError } = await supabaseAdmin.rpc("increment_saldo_usdt", {
-      p_user_id: referrerId,
-      p_amount: commissionAmount,
-    });
+    // 2. Sumar comisión al saldo_usdt del patrocinador usando SELECT + UPDATE
+    console.log(`💰 Actualizando saldo de patrocinador ${referrerId} con comisión ${commissionAmount} USDT`);
+    
+    // SELECT para obtener saldo actual
+    const { data: perfil, error: fetchError } = await supabaseAdmin
+      .from("perfiles")
+      .select("saldo_usdt")
+      .eq("id", referrerId)
+      .maybeSingle();
 
-    if (rpcError) {
-      console.error("❌ Error en RPC increment_saldo_usdt:", rpcError);
-      // Fallback: actualizar directamente
-      const { error: updateError } = await supabaseAdmin
-        .from("perfiles")
-        .update({
-          saldo_usdt: supabaseAdmin.raw(`saldo_usdt + ${commissionAmount}`)
-        })
-        .eq("id", referrerId);
+    if (fetchError || !perfil) {
+      console.error("❌ Error obteniendo perfil del patrocinador:", fetchError);
+      throw fetchError || new Error("Perfil del patrocinador no encontrado");
+    }
 
-      if (updateError) {
-        console.error("❌ Error en fallback de actualización de saldo:", updateError);
-        throw updateError;
-      }
+    const saldoActual = Number(perfil.saldo_usdt || 0);
+    const nuevoSaldo = saldoActual + commissionAmount;
+    console.log(`💰 Saldo actualizado: ${saldoActual} -> ${nuevoSaldo}`);
+
+    // UPDATE con el nuevo saldo
+    const { error: updateError } = await supabaseAdmin
+      .from("perfiles")
+      .update({ saldo_usdt: nuevoSaldo })
+      .eq("id", referrerId);
+
+    if (updateError) {
+      console.error("❌ Error actualizando saldo del patrocinador:", updateError);
+      throw updateError;
     }
 
     // 3. Registrar en tabla commissions (si existe)
